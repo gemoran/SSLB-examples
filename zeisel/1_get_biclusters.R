@@ -14,7 +14,8 @@ bicmix_dir <- "../../Code/BicMix/BicMix"
 Y_raw <- read.table("data/Y_raw.txt", stringsAsFactors = F)
 
 # normalize quantiles (average quantile normalization)
-Y <- normalize.quantiles(Y_raw)
+Y <- normalize.quantiles(t(Y_raw))
+Y <- t(Y)
 
 # save normalized gene expression for bicmix
 write.table(t(Y), file = "data/Y_ave_bicmix.txt", row.names = F, col.names = F)
