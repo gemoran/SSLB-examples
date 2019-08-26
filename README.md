@@ -16,9 +16,9 @@ It requires the R package `SSLB` (https://github.com/gemoran/SSLB).
 (ii) run code to reproduce the results in Section 4 of Moran et al (2019). 
 
 - `zeisel`: folder contains code to (i) process data from Zeisel et al (2015) and 
-(ii) run code to reproduce the results in Section 4 of Moran et al (2019). 
+(ii) run code to reproduce the results in Section 5 of Moran et al (2019). 
 
-
+NOTE: for both `breastCancerNKI` and `zeisel`, the script `0_process_data.R` does not need to be run as processed data is stored in `..\data`. The script is included here for completeness.
 
 
 
