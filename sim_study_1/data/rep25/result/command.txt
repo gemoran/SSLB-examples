@@ -1,0 +1,5 @@
+../../Code/BicMix/BicMix --nf 30 --y data/rep25/Y.txt --out data/rep25/result --sep space 
+
+Y_TMP has dimension of 1000 by 300
+
+Submatrix of Y has dimension of 1000 by 300
