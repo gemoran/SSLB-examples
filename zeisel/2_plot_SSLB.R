@@ -207,6 +207,80 @@ length(unique(subclasses[groups == 2]))
 
 apply(X_SSLB[groups == 2, ], 2, function(x) sum(x!=0))
 
+#------------------------------------------
 
+# residual plot ----------------
+Y = as.matrix(read.table("data/Y_quantile.txt", stringsAsFactors = F))
 
+residuals = Y - X_SSLB %*% t(B_SSLB)
+dat = melt(residuals)
+dat$y = as.vector(Y)
+dat$y_fit = as.vector(X_SSLB %*% t(B_SSLB))
 
+dat_filter = dat[abs(dat$value) < 10, ]
+
+pdf("figures/SSLB_residual_hist_filter.pdf", width = 4, height = 3.2)
+
+ggplot(dat_filter, aes(x = value)) + 
+  geom_histogram(bins = 50) +
+  labs(title = "Zeisel Data: SSLB Residuals")  
+
+dev.off()
+
+pdf("figures/SSLB_residual_hist.pdf", width = 4, height = 3.2)
+
+ggplot(dat, aes(x = value)) + 
+  geom_histogram(bins = 50) +
+  labs(title = "Zeisel Data: SSLB Residuals")  
+
+dev.off()
+
+dat_filter = dat
+dat_filter = dat_filter[order(sample(1:nrow(dat_filter), 10000, replace = F)), ]
+dat_filter$n = 1:10000
+
+pdf("figures/SSLB_fitted_plot.pdf", width = 4, height = 3.2)
+
+ggplot(dat_filter, aes(x = y, y = y_fit)) + 
+  geom_point() +
+  labs(title = "Zeisel Data: SSLB") + 
+  ylab("Y fitted") +
+  xlab("Y") + 
+  geom_abline(intercept = 0, slope = 1, color = "red")
+
+dev.off()
+
+dat_filter = dat
+dat_filter = dat_filter[order(sample(1:nrow(dat_filter), 10000, replace = F)), ]
+dat_filter$n = 1:10000
+
+dat_filter$y_fit[dat_filter$y_fit < 0] = 0
+
+pdf("figures/SSLB_fitted_log_plot.pdf", width = 4, height = 3.2)
+
+ggplot(dat_filter, aes(x = log(y + 1e-5), y = log(y_fit + 1e-5))) + 
+  geom_point() +
+  labs(title = "Zeisel Data: SSLB") + 
+  ylab("log(Y fitted)") +
+  xlab("log(Y)") + 
+  geom_abline(intercept = 0, slope = 1, color = "red")
+
+dev.off()
+
+#-------
+# range of sparsity
+sparse_dat = data.frame(X = apply(X_SSLB, 2, function(x) sum(x!=0))/N * 100,
+                        B = apply(B_SSLB, 2, function(x) sum(x!=0))/G * 100,
+                        n = factor(1:K_SSLB))
+sparse_dat = melt(sparse_dat)
+
+pdf("figures/sparsity_levels.pdf", width = 13, height = 3)
+
+ggplot(sparse_dat, aes(x = n, y = value, fill = variable)) + 
+  geom_bar(stat = "identity", position = "dodge") + 
+  scale_y_continuous(limits = c(0, 100)) + 
+  ylab("% non-zero") + 
+  xlab("Bicluster") +
+  labs(title = "Zeisel Data: SSLB Sparsity Levels")
+
+dev.off()

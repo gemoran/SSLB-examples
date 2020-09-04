@@ -4,7 +4,10 @@ library(pals)
 
 source('../SSLB_functions.R', echo=TRUE)
 
-load("SSLB_result/SSLB_out.RData")
+option = c("raw", "norm")
+i = 1
+
+load(paste("SSLB_result/SSLB_out_", option[i], ".RData", sep = ""))
 load("data/gene_info.RData")
 load("data/sample_info.RData")
 
@@ -25,20 +28,6 @@ X_SSLB <- out$X
 K_SSLB <- out$K
 B_SSLB <- out$B
 
-# which biclusters contain ESR1
-B_SSLB[which(gene_info$HUGO.gene.symbol == "ESR1"), ]
-
-# HER2 markers
-B_SSLB[which(gene_info$HUGO.gene.symbol == "ERBB2"), ]
-
-# sign change to make ERRB2 positive in B for consistent colors
-X_SSLB[, 2] <- -X_SSLB[, 2]
-B_SSLB[, 2] <- -B_SSLB[, 2]
-
-# order biclusters (columns)
-X_SSLB <- X_SSLB[, union(c(3, 2), 1:K_SSLB)]
-B_SSLB <- B_SSLB[, union(c(3, 2), 1:K_SSLB)]
-
 # significant difference
 p_vals <- numeric(K_SSLB)
 for (k in 1:K_SSLB) {
@@ -46,7 +35,23 @@ for (k in 1:K_SSLB) {
 }
 
 er_k <- which.min(p_vals)
-er_k < 0.01/K_SSLB
+p_vals < 0.01/K_SSLB
+
+B_SSLB = B_SSLB[, order(p_vals)]
+X_SSLB = X_SSLB[, order(p_vals)]
+
+# which biclusters contain ESR1
+B_SSLB[which(gene_info$HUGO.gene.symbol == "ESR1"), ]
+
+# HER2 markers
+B_SSLB[which(gene_info$HUGO.gene.symbol == "ERBB2"), ]
+
+# sign change to make ERRB2 positive in B for consistent colors
+X_SSLB[, 3] <- -X_SSLB[, 3]
+B_SSLB[, 3] <- -B_SSLB[, 3]
+
+X_SSLB = X_SSLB[, union(c(1, 3), 1:ncol(X_SSLB))]
+B_SSLB = B_SSLB[, union(c(1, 3), 1:ncol(B_SSLB))]
 
 # PLOTS -----------------------------------------------------
 # order patients within ER status
@@ -94,7 +99,7 @@ er_plot <- plot_matrix(er[ord], title = "ER") +
   theme(text = element_text(size= 12))
 
 # plot with first 10 biclusters
-SSLB_plot <- plot_matrix(X_SSLB[ord, 1:10]/max(abs(X_SSLB)) * rescale, 
+SSLB_plot <- plot_matrix(X_SSLB[ord, ], 
                          title = "SSLB Factor Matrix", legend = T) +
   theme(text = element_text(size= 12)) + theme(legend.position = "left")
 

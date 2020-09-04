@@ -5,7 +5,6 @@ library(ggplot2)
 library(reshape2)
 library(clue)
 library(gridExtra)
-library(MASS)
 
 # function to generate dense and sparse non-overlapping biclusters
 generate_dense_bic <- function(n_f, n_l, n_bic, n_dense, min_f = 5, max_f = 25, min_l = 10, max_l = 30,
@@ -41,7 +40,7 @@ generate_dense_bic <- function(n_f, n_l, n_bic, n_dense, min_f = 5, max_f = 25, 
       start <- sample(1:(n_f - num + 1), 1)
       index <- start:(start + num - 1) 
     }
-    X[, k] <- rnorm(N, mean = 0, sd = sd_f_noise)
+    X[, k] <- rnorm(n_f, mean = 0, sd = sd_f_noise)
     sgn <- (-1 + 2 * rbinom(length(index), 1, 0.5))
     X[index, k] <- rnorm(length(index), mean = sgn * mean_f, sd = sd_f)
     X_bic[index, k] <- 1
@@ -73,16 +72,16 @@ generate_dense_bic <- function(n_f, n_l, n_bic, n_dense, min_f = 5, max_f = 25, 
       start <- sample(1:(n_l - num + 1), 1)
       index <- start:(start + num - 1) 
     }
-    B[, k] <- rnorm(G, mean = 0, sd = sd_l_noise)
+    B[, k] <- rnorm(n_l, mean = 0, sd = sd_l_noise)
     sgn <- (-1 + 2 * rbinom(length(index), 1, 0.5))
     B[index, k] <- rnorm(length(index), mean = sgn * mean_l, sd = sd_l)
     B_bic[index, k] <- 1
   }
   
   for(k in (n_bic - n_dense + 1):(n_bic)) {
-    X[, k] <- rnorm(N, 0, sd_f_dense)
+    X[, k] <- rnorm(n_f, 0, sd_f_dense)
     X_bic[, k] <- 1
-    B[, k] <- rnorm(G, 0, sd_l_dense)
+    B[, k] <- rnorm(n_l, 0, sd_l_dense)
     B_bic[, k] <- 1
   }
   
@@ -174,6 +173,176 @@ generate_sparse_bic <- function(n_f, n_l, n_bic, min_f = 5, max_f = 25, min_l = 
   Y <- X %*% t(B) + mvrnorm(n_f, numeric(n_l), Sigma = diag(sd_epsilon^2, n_l))
   return(list(data = Y, factors = X, loadings = B, factors_bic = X_bic, loadings_bic = B_bic))
 }
+
+#---------------------------------------------------------------------------------------
+
+# function to generate dense and sparse non-overlapping biclusters
+generate_dense_bic_poisson <- function(n_f, n_l, n_bic, n_dense, min_f = 5, max_f = 25, min_l = 10, max_l = 30,
+                               mean_f = 0, sd_f = sqrt(2), sd_f_noise = 0.2,
+                               mean_l = 0, sd_l = sqrt(2), sd_l_noise = 0.2,
+                               sd_f_dense = 2, sd_l_dense = 2,
+                               overlap_f = 5, overlap_l = 10, sd_epsilon = 1) {
+  # generate data
+  X <- matrix(0, nrow = n_f, ncol = n_bic)
+  X_bic <- matrix(0, nrow = n_f, ncol = n_bic)
+  for (k in 1:(n_bic-n_dense)) {
+    num <- sample(min_f:max_f, 1)
+    if (k > 1) {
+      prev <- apply(as.matrix(X_bic[, 1:(k - 1)]), 2, function(x) c(min(which(x != 0)), c(max(which(x != 0)))))
+      prev <- prev + c(-num + overlap_f, -overlap_f + 1)
+      prev <- as.matrix(prev[, prev[1, ] < prev[2, ]])
+      prev[prev < 0] <- 1
+      if(length(prev) > 0) {
+        remove <- unlist(apply(prev, 2, function(x) seq(x[1], x[2], by = 1)))
+        remove <- intersect(1:(n_f - num + 1), remove)
+        if (length(remove) > (n_f - num)) {
+          start <- sample(1:(n_f - num + 1), 1)
+          index <- start:(start + num - 1)
+        } else {
+          start <- sample((1:(n_f - num + 1))[-c(remove)], 1)
+          index <- start:(start + num - 1) 
+        }
+      } else {
+        start <- sample(1:(n_f - num + 1), 1)
+        index <- start:(start + num - 1)
+      }
+    } else {
+      start <- sample(1:(n_f - num + 1), 1)
+      index <- start:(start + num - 1) 
+    }
+    X[index, k] <- abs(rnorm(length(index), mean = mean_f, sd = sd_f))
+    X_bic[index, k] <- 1
+  }
+  B <- matrix(0, nrow = n_l, ncol = n_bic)
+  B_bic <- matrix(0, nrow = n_l, ncol = n_bic)
+  for (k in 1:n_bic) {
+    num <- sample(min_l:max_l, 1)
+    if (k > 1) {
+      prev <- apply(as.matrix(B_bic[, 1:(k - 1)]), 2, function(x) c(min(which(x != 0)), c(max(which(x != 0)))))
+      prev <- prev + c(-num + overlap_l, -overlap_l + 1)
+      prev <- as.matrix(prev[, prev[1, ] < prev[2, ]])
+      prev[prev < 0] <- 1
+      if(length(prev) > 0) {
+        remove <- unlist(apply(prev, 2, function(x) seq(x[1], x[2], by = 1)))
+        remove <- intersect(1:(n_l - num + 1), remove)
+        if (length(remove) > (n_l - num)) {
+          start <- sample(1:(n_l - num + 1), 1)
+          index <- start:(start + num - 1)
+        } else {
+          start <- sample((1:(n_l - num + 1))[-c(remove)], 1)
+          index <- start:(start + num - 1) 
+        }
+      } else {
+        start <- sample(1:(n_l - num + 1), 1)
+        index <- start:(start + num - 1)
+      }
+    } else {
+      start <- sample(1:(n_l - num + 1), 1)
+      index <- start:(start + num - 1) 
+    }
+    B[index, k] <- abs(rnorm(length(index), mean = mean_l, sd = sd_l))
+    B_bic[index, k] <- 1
+  }
+  
+  for(k in (n_bic - n_dense + 1):(n_bic)) {
+    X[, k] <- abs(rnorm(n_f, 0, sd_f_dense))
+    X_bic[, k] <- 1
+    B[, k] <- abs(rnorm(n_l, 0, sd_l_dense))
+    B_bic[, k] <- 1
+  }
+  
+  
+  shuffle <- sample(2:(n_bic - n_dense + 1), (n_bic - n_dense))
+  shuffle <- union(shuffle, 1:n_bic)
+  X <- X[, shuffle]
+  X_bic <- X_bic[, shuffle]
+  
+  Y_mean = X %*% t(B)
+  Y <- matrix(mapply(rpois, n = rep(1, n_l * n_f), lambda = as.vector(Y_mean)), nrow = n_f, ncol = n_l)
+  
+  
+  return(list(data = Y, factors = X, loadings = B, factors_bic = X_bic, loadings_bic = B_bic))
+}
+
+
+# function to generate sparse non-overlapping biclusters
+generate_sparse_bic_poisson <- function(n_f, n_l, n_bic, min_f = 5, max_f = 25, min_l = 10, max_l = 30,
+                                mean_f = 0, sd_f = sqrt(2), sd_f_noise = 0.2,
+                                mean_l = 0, sd_l = sqrt(2), sd_l_noise = 0.2,
+                                overlap_f = 5, overlap_l = 10, sd_epsilon = 1) {
+  # generate data
+  X <- matrix(0, nrow = n_f, ncol = n_bic)
+  X_bic <- matrix(0, nrow = n_f, ncol = n_bic)
+  for (k in 1:n_bic) {
+    num <- sample(min_f:max_f, 1)
+    if (k > 1) {
+      prev <- apply(as.matrix(X_bic[, 1:(k - 1)]), 2, function(x) c(min(which(x != 0)), c(max(which(x != 0)))))
+      prev <- prev + c(-num + overlap_f, -overlap_f + 1)
+      prev <- as.matrix(prev[, prev[1, ] < prev[2, ]])
+      prev[prev < 0] <- 1
+      if(length(prev) > 0) {
+        remove <- unlist(apply(prev, 2, function(x) seq(x[1], x[2], by = 1)))
+        remove <- intersect(1:(n_f - num + 1), remove)
+        if (length(remove) > (n_f - num)) {
+          start <- sample(1:(n_f - num + 1), 1)
+          index <- start:(start + num - 1)
+        } else {
+          start <- sample((1:(n_f - num + 1))[-c(remove)], 1)
+          index <- start:(start + num - 1) 
+        }
+      } else {
+        start <- sample(1:(n_f - num + 1), 1)
+        index <- start:(start + num - 1)
+      }
+    } else {
+      start <- sample(1:(n_f - num + 1), 1)
+      index <- start:(start + num - 1) 
+    }
+    X[, k] = abs(rnorm(n_f, mean = 0, sd = sd_f_noise))
+    X[index, k] <- abs(rnorm(length(index), mean = mean_f, sd = sd_f))
+    X_bic[index, k] <- 1
+  }
+  B <- matrix(0, nrow = n_l, ncol = n_bic)
+  B_bic <- matrix(0, nrow = n_l, ncol = n_bic)
+  for (k in 1:n_bic) {
+    num <- sample(min_l:max_l, 1)
+    if (k > 1) {
+      prev <- apply(as.matrix(B_bic[, 1:(k - 1)]), 2, function(x) c(min(which(x != 0)), c(max(which(x != 0)))))
+      prev <- prev + c(-num + overlap_l, -overlap_l + 1)
+      prev <- as.matrix(prev[, prev[1, ] < prev[2, ]])
+      prev[prev < 0] <- 1
+      if(length(prev) > 0) {
+        remove <- unlist(apply(prev, 2, function(x) seq(x[1], x[2], by = 1)))
+        remove <- intersect(1:(n_l - num + 1), remove)
+        if (length(remove) > (n_l - num)) {
+          start <- sample(1:(n_l - num + 1), 1)
+          index <- start:(start + num - 1)
+        } else {
+          start <- sample((1:(n_l - num + 1))[-c(remove)], 1)
+          index <- start:(start + num - 1) 
+        }
+      } else {
+        start <- sample(1:(n_l - num + 1), 1)
+        index <- start:(start + num - 1)
+      }
+    } else {
+      start <- sample(1:(n_l - num + 1), 1)
+      index <- start:(start + num - 1) 
+    }
+    B[, k] = abs(rnorm(n_l, mean = 0, sd = sd_l_noise))
+    B[index, k] <- abs(rnorm(length(index), mean = mean_l, sd = sd_l))
+    B_bic[index, k] <- 1
+  }
+  
+  Y_mean = X %*% t(B)
+  Y <- matrix(mapply(rpois, n = rep(1, n_l * n_f), lambda = as.vector(Y_mean)), nrow = n_f, ncol = n_l)
+  
+  return(list(data = Y, factors = X, loadings = B, factors_bic = X_bic, loadings_bic = B_bic))
+}
+
+
+#---------------------------------------------------------------------------------
+
 
 # color palette
 bic_pal <- colorRampPalette(rev(c('#ca0020','#f4a582','#ffffff','#92c5de','#0571b0')))(25)

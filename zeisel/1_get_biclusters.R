@@ -5,24 +5,28 @@ source('../SSLB_functions.R', echo=TRUE)
 
 library(SSLB)
 library(fabia)
-bicmix_dir <- "../../Code/BicMix/BicMix"
+library(isa2)
+library(biclust)
+bicmix_dir <- as.character(as.matrix(read.table("../bicmix_directory.txt", stringsAsFactors = F)))
+paste("../", bicmix_dir, sep = "")
 
 # -------------------------------------
 # Read in data
 #--------------------------------------
 
 Y_raw <- read.table("data/Y_raw.txt", stringsAsFactors = F)
+N <- nrow(Y_raw)
+G <- ncol(Y_raw)
 
 # normalize quantiles (average quantile normalization)
 Y <- normalize.quantiles(t(Y_raw))
 Y <- t(Y)
 
-# save normalized gene expression for bicmix
-write.table(t(Y), file = "data/Y_ave_bicmix.txt", row.names = F, col.names = F)
+write.table(Y, file = "data/Y_quantile.txt", row.names = F, col.names = F)
+
+write.table(t(Y), file = "data/Y_bicmix.txt", row.names = F, col.names = F)
 
 Y <- as.matrix(Y)
-N <- nrow(Y)
-G <- ncol(Y)
 
 K_init <- 100
 
@@ -32,9 +36,8 @@ K_init <- 100
 
 lambda1 <- 1
 lambda1_tilde <- 1
-lambda0s <- c(1, 5, 10, 50, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000)
+lambda0s <- c(1, 5, 10, 50, 100, 500, 1e3, 1e4, 1e5, 1e6, 1e7)
 lambda0_tildes <- lambda0s
-
 
 time <- system.time(out <- SSLB(Y, K_init,
                                   lambda0s = lambda0s,
@@ -45,7 +48,7 @@ time <- system.time(out <- SSLB(Y, K_init,
                                   a = 1/(G * K_init),
                                   a_tilde = 1/(N * K_init),
                                   d = 0,
-                                  IBP = 1, EPSILON = 0.05))
+                                  IBP = 0, EPSILON = 0.01))
 
 
 
@@ -96,7 +99,7 @@ dir <- "bicmix_result"
 
 bicmix_output <- system2(bicmix_dir,
                            args = c("--nf", as.character(K_init),
-                                    "--y", "data/Y_ave_bicmix.txt",
+                                    "--y", "data/Y_bicmix.txt",
                                     "--out", dir, "--sep space"),
                            stdout = T)
 
@@ -112,6 +115,7 @@ bicmix_output <- system2(bicmix_dir,
   }
 
   if (any(X_bicmix != 0)) {
+    
     X_norm <- apply(X_bicmix, 2, function(x) sum(abs(x)))
     B_norm <- apply(B_bicmix, 2, function(x) sum(abs(x)))
 
@@ -123,7 +127,42 @@ bicmix_output <- system2(bicmix_dir,
 
   }
 
+  
+# -------------------------------------
+# ISA
+#--------------------------------------
+  
+  
+out_ISA = isa(Y)
+
+save(out_ISA, file = "ISA_result/out_ISA.RData")
+
+X_ISA = out_ISA$rows
+B_ISA = out_ISA$columns
 
 
+# -------------------------------------
+# Plaid
+#--------------------------------------
+
+plaid_out = capture.output(out <- biclust(Y, method = BCPlaid()))
 
 
+X_plaid = as.matrix(apply(out@RowxNumber, 2, as.numeric))
+B_plaid = as.matrix(apply(out@NumberxCol, 1, as.numeric))
+
+K_plaid = ncol(X_plaid)
+
+
+# -------------------------------------
+# Spectral
+#--------------------------------------
+
+
+out = biclust(Y+1e-3, method = BCSpectral())
+
+
+X_spectral = as.matrix(apply(out@RowxNumber, 2, as.numeric))
+B_spectral = as.matrix(apply(out@NumberxCol, 1, as.numeric))
+
+K_spectral = ncol(X_spectral)

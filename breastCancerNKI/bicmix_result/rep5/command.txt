@@ -1,5 +1,0 @@
-../../Code/BicMix/BicMix --nf 50 --y data/Y_bicmix.txt --out bicmix_result/rep5 --sep space 
-
-Y_TMP has dimension of 24158 by 337
-
-Submatrix of Y has dimension of 24158 by 337

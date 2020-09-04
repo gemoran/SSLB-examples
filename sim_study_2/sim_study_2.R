@@ -3,18 +3,24 @@
 library(fabia)
 library(SSLB)
 library(mvtnorm)
+library(isa2)
+library(biclust)
 
 # Requires these functions
 source("../SSLB_functions.R")
 
 # directory for C code for BicMix (downloaded from https://www.cs.princeton.edu/~bee/software/BicMix-Code-for-distribution.zip)
-# CHANGE TO CORRECT DIRECTORY
-bicmix_dir <- "../../Code/BicMix/BicMix"
+bicmix_dir <- as.character(as.matrix(read.table("../bicmix_directory.txt", stringsAsFactors = F)))
+paste("../", bicmix_dir, sep = "")
 
 GEN_DATA <- F # if true, generate new data. if false, read in data
 RUN_SSLB <- T
-RUN_BICMIX <- T
-RUN_FABIA <- T
+RUN_BICMIX <- F
+RUN_FABIA <- F
+READ_SSBiEM = F
+RUN_ISA = F
+RUN_SPECTRAL = F
+RUN_PLAID = F
 
 set.seed(123456789)
 
@@ -27,8 +33,9 @@ nrep <- 50 # number of replications
 
 #-----------------------------------
 
-methods <- c("SSLB_IBP", "SSLB_PY", "SSLB_BB", "Bicmix", "FABIA")
-metrics <- c("consensus", "recovery", "relevance", "K")
+methods <- c("SSLB_IBP", "SSLB_PY", "SSLB_BB", "Bicmix", "FABIA", "SSBiEM",
+             "ISA", "Spectral", "Plaid")
+metrics <- c("consensus", "recovery", "relevance", "var", "K")
 n_methods <- length(methods)
 n_metrics <- length(metrics)
 result <- array(NA, dim = c(n_methods, n_metrics, nrep))
@@ -63,7 +70,7 @@ for (r in 1:nrep) {
     B <- as.matrix(read.table(file = paste(dir, "/B.txt", sep = "")))
   }
   
-  
+  ss_total = sum((t(t(Y) - apply(Y, 2, mean)))^2)
   
   #---------------------------
   # SSLB
@@ -71,9 +78,9 @@ for (r in 1:nrep) {
   if (RUN_SSLB) {
     lambda1 <- 1
     lambda1_tilde <- 1
-    lambda0s <- c(1, 5, 10, 50, 100, 500, 1000, 10000, 100000, 1000000, 10000000)
-    lambda0_tildes <- lambda0s
-    
+    lambda0s <- c(1, 5, 10, 50, 100, 500, 1e3, 1e4, 1e5, 1e6, 1e7)
+    lambda0_tildes <- c(1, rep(5, length(lambda0s)-1))
+
     
     SSLB_output <- capture.output(out <- SSLB(Y, 
                                               K_init,
@@ -88,8 +95,8 @@ for (r in 1:nrep) {
     X_col <- which(apply(out$X, 2, function(x) sum(x != 0)) < 0.5 * N)
     B_col <- which(apply(out$B, 2, function(x) sum(x != 0)) < 0.5 * G)
     keep <- intersect(X_col, B_col)
-    X_SSLB <- out$X[, keep]
-    B_SSLB <- out$B[, keep]
+    X_SSLB <- matrix(as.vector(out$X[, keep]), nrow = N)
+    B_SSLB <- matrix(as.vector(out$B[, keep]), nrow = G)
     K_SSLB <- ncol(B_SSLB)
     
     if(out$K > 0) {
@@ -98,6 +105,8 @@ for (r in 1:nrep) {
       result["SSLB_PY", "consensus", r] <- result_SSLB$consensus
       result["SSLB_PY", "recovery", r] <- result_SSLB$recovery
       result["SSLB_PY", "relevance", r] <- result_SSLB$relevance
+      result["SSLB_PY", "var", r] <- 1 - sum((Y - out$X %*% t(out$B))^2) / ss_total
+      
       result["SSLB_PY", "K", r] <- K_SSLB
     } else {
       result["SSLB_PY", "K", r] <- K_SSLB
@@ -113,15 +122,13 @@ for (r in 1:nrep) {
                                               d = 0,
                                               IBP = 1, EPSILON = 0.01))
     
-    X_SSLB <- out$X
-    B_SSLB <- out$B
-    
-    X_col <- which(apply(X_SSLB, 2, function(x) sum(x != 0)) < 0.5 * N)
-    B_col <- which(apply(B_SSLB, 2, function(x) sum(x != 0)) < 0.5 * G)
+    X_col <- which(apply(out$X, 2, function(x) sum(x != 0)) < 0.5 * N)
+    B_col <- which(apply(out$B, 2, function(x) sum(x != 0)) < 0.5 * G)
     keep <- intersect(X_col, B_col)
-    X_SSLB <- out$X[, keep]
-    B_SSLB <- out$B[, keep]
+    X_SSLB <- matrix(as.vector(out$X[, keep]), nrow = N)
+    B_SSLB <- matrix(as.vector(out$B[, keep]), nrow = G)
     K_SSLB <- ncol(B_SSLB)
+    
     
     
     if(out$K > 0) {
@@ -130,6 +137,8 @@ for (r in 1:nrep) {
       result["SSLB_IBP", "consensus", r] <- result_SSLB$consensus
       result["SSLB_IBP", "recovery", r] <- result_SSLB$recovery
       result["SSLB_IBP", "relevance", r] <- result_SSLB$relevance
+      result["SSLB_IBP", "var", r] <-  1 - sum((Y - out$X %*% t(out$B))^2) / ss_total
+      
       result["SSLB_IBP", "K", r] <- K_SSLB
     } else {
       result["SSLB_IBP", "K", r] <- K_SSLB
@@ -148,8 +157,8 @@ for (r in 1:nrep) {
     X_col <- which(apply(out$X, 2, function(x) sum(x != 0)) < 0.5 * N)
     B_col <- which(apply(out$B, 2, function(x) sum(x != 0)) < 0.5 * G)
     keep <- intersect(X_col, B_col)
-    X_SSLB <- out$X[, keep]
-    B_SSLB <- out$B[, keep]
+    X_SSLB <- matrix(as.vector(out$X[, keep]), nrow = N)
+    B_SSLB <- matrix(as.vector(out$B[, keep]), nrow = G)
     K_SSLB <- ncol(B_SSLB)
     
     
@@ -159,6 +168,8 @@ for (r in 1:nrep) {
       result["SSLB_BB", "consensus", r] <- result_SSLB$consensus
       result["SSLB_BB", "recovery", r] <- result_SSLB$recovery
       result["SSLB_BB", "relevance", r] <- result_SSLB$relevance
+      result["SSLB_BB", "var", r] <-  1 - sum((Y - out$X %*% t(out$B))^2) / ss_total
+      
       result["SSLB_BB", "K", r] <- K_SSLB
     } else {
       result["SSLB_BB", "K", r] <- K_SSLB
@@ -172,7 +183,7 @@ for (r in 1:nrep) {
     #---------------------------
     
     system2("mkdir", paste(dir, "/result", sep = ""))
-    bicmix_output <- system2(bicmix_dir, 
+    bicmix_output <- system2(bicmix_dir,
                              args = c("--nf", as.character(K_init),
                                       "--y", paste(dir, "/Y.txt", sep = ""),
                                       "--out", paste(dir, "/result", sep = ""), "--sep space"),
@@ -187,6 +198,9 @@ for (r in 1:nrep) {
     if (inherits(B_bicmix, 'try-error')) {
       B_bicmix <- matrix(0, nrow = G, ncol = K)
     }
+    
+    result["Bicmix", "var", r] <- 1 - sum((Y - X_bicmix %*% t(B_bicmix))^2) / ss_total
+
     Z_bicmix <- try(as.matrix(read.table(paste(dir, "/result/Z", sep = ""), header = F)), silent = TRUE)
     O_bicmix <- try(as.matrix(read.table(paste(dir, "/result/O", sep = ""), header = F)), silent = TRUE)
     keep <- rbind(Z_bicmix[1,], O_bicmix[1,])
@@ -198,6 +212,7 @@ for (r in 1:nrep) {
     
     X_bicmix[abs(X_bicmix) < 10e-10] <- 0
     B_bicmix[abs(B_bicmix) < 10e-10] <- 0
+    
     
     zeroes_B <- which(apply(B_bicmix, 2, function(x) all(x == 0)))
     zeroes_X <- which(apply(X_bicmix, 2, function(x) all(x == 0)))
@@ -223,6 +238,7 @@ for (r in 1:nrep) {
       result["Bicmix", "consensus", r] <- result_bicmix$consensus
       result["Bicmix", "recovery", r] <- result_bicmix$recovery
       result["Bicmix", "relevance", r] <- result_bicmix$relevance
+      
       result["Bicmix", "K", r] <- K_bicmix
     } else {
       result["Bicmix", "K", r] <- K_bicmix
@@ -236,17 +252,24 @@ for (r in 1:nrep) {
   if (RUN_FABIA) {
 
     Y_FABIA <- Y
-    K_svd <- K
-    FABIA_output <- capture.output(out_FABIA <- fabia(t(Y_FABIA), K_svd), type = "message")
+    FABIA_output <- capture.output(out_FABIA <- fabia(t(Y_FABIA), K), type = "message")
+    
+    X_FABIA <- t(out_FABIA@Z)
+    B_FABIA <- out_FABIA@L
+    
+    K_FABIA = ncol(X_FABIA)
     
     FABIA_biclusters <- extractBic(out_FABIA)
-    B_FABIA <- matrix(0, nrow = G, ncol = K)
-    X_FABIA <- matrix(0, nrow = N, ncol = K)
+    B_FABIA_support <- matrix(0, nrow = G, ncol = K_FABIA)
+    X_FABIA_support <- matrix(0, nrow = N, ncol = K_FABIA)
     
-    for(k in 1:K_svd) {
-      B_FABIA[FABIA_biclusters$numn[k,]$numng, k] <- 1
-      X_FABIA[FABIA_biclusters$numn[k,]$numnp, k] <- 1
+    for(k in 1:K_FABIA) {
+      B_FABIA_support[FABIA_biclusters$numn[k,]$numng, k] <- 1
+      X_FABIA_support[FABIA_biclusters$numn[k,]$numnp, k] <- 1
     }
+    
+    X_FABIA[X_FABIA_support == 0] <- 0
+    B_FABIA[B_FABIA_support == 0] <- 0
     
     zeroes_B <- which(apply(B_FABIA, 2, function(x) all(x == 0)))
     zeroes_X <- which(apply(X_FABIA, 2, function(x) all(x == 0)))
@@ -255,16 +278,18 @@ for (r in 1:nrep) {
     if (length(zeroes) > 0) {
       X_FABIA <- as.matrix(X_FABIA[, -zeroes])
       B_FABIA <- as.matrix(B_FABIA[, -zeroes])
+      
+      result["FABIA", "var", r] <- 1 - sum((Y - X_FABIA %*% t(B_FABIA))^2) / ss_total
+      
     }
-    
+
+
     X_col <- which(apply(X_FABIA, 2, function(x) sum(x != 0)) < 0.5 * N)
     B_col <- which(apply(B_FABIA, 2, function(x) sum(x != 0)) < 0.5 * G)
     keep <- intersect(X_col, B_col)
     X_FABIA <- X_FABIA[, keep]
     B_FABIA <- B_FABIA[, keep]
     K_FABIA <- ncol(B_FABIA)
-    
-
     
     K_FABIA <- ncol(X_FABIA)
     
@@ -281,10 +306,125 @@ for (r in 1:nrep) {
     }
     
   }
+  
+  
+  #-------------------------------
+  # SSBiEM
+  #-------------------------------
+  
+  if (READ_SSBiEM) {
+    X_SSBiEM = as.matrix(read.csv(paste(dir, "/matlab/X.txt", sep = ""), header = F))
+    B_SSBiEM = as.matrix(read.csv(paste(dir, "/matlab/B.txt", sep = ""), header = F))
+    X_SSBiEM_support = as.matrix(read.csv(paste(dir, "/matlab/X_support.txt", sep = ""), header = F))
+    B_SSBiEM_support = as.matrix(read.csv(paste(dir, "/matlab/B_support.txt", sep = ""), header = F))
+    
+    X_SSBiEM[X_SSBiEM_support == 0] = 0
+    B_SSBiEM[B_SSBiEM_support == 0] = 0
+    
+    result["SSBiEM", "var", r] <- 1 - sum((Y - X_SSBiEM %*% t(B_SSBiEM))^2) / ss_total
+    
+    X_col <- which(apply(X_SSBiEM, 2, function(x) sum(x != 0)) < 0.5 * N)
+    B_col <- which(apply(B_SSBiEM, 2, function(x) sum(x != 0)) < 0.5 * G)
+    keep <- intersect(X_col, B_col)
+    X_SSBiEM <- matrix(as.vector(X_SSBiEM[, keep]), nrow = N)
+    B_SSBiEM <- matrix(as.vector(B_SSBiEM[, keep]), nrow = G)
+    
+    K_SSBiEM = ncol(X_SSBiEM)
+    
+    if(K_SSBiEM > 0) {
+      result_SSBiEM <- analyze_bic(X_SSBiEM, B_SSBiEM, X, B)
+      
+      result["SSBiEM", "consensus", r] <- result_SSBiEM$consensus
+      result["SSBiEM", "recovery", r] <- result_SSBiEM$recovery
+      result["SSBiEM", "relevance", r] <- result_SSBiEM$relevance
+      result["SSBiEM", "K", r] <- K_SSBiEM
+    } else {
+      result["SSBiEM", "K", r] <- K_SSBiEM
+    }
+  }
+  
+  #-------------------------------
+  # ISA
+  #-------------------------------
+  
+  if (RUN_ISA) {
+    
+    out = isa(Y)
+    
+    X_ISA = out$rows
+    B_ISA = out$columns
+    
+    K_ISA = ncol(X_ISA)
+    
+    if(K_ISA > 0) {
+      result_ISA <- analyze_bic(X_ISA, B_ISA, X, B)
+      
+      result["ISA", "consensus", r] <- result_ISA$consensus
+      result["ISA", "recovery", r] <- result_ISA$recovery
+      result["ISA", "relevance", r] <- result_ISA$relevance
+      result["ISA", "K", r] <- K_ISA
+    } else {
+      result["ISA", "K", r] <- K_ISA
+    }
+  }
+  
+  #-------------------------------
+  # Spectral
+  #-------------------------------
+  
+  if (RUN_SPECTRAL) {
+    
+    out = biclust(exp(Y), method = BCSpectral())
+    
+    X_spectral = as.matrix(apply(out@RowxNumber, 2, as.numeric))
+    B_spectral = as.matrix(apply(out@NumberxCol, 1, as.numeric))
+    
+    K_spectral = ncol(X_spectral)
+    
+    if(K_spectral > 0) {
+      result_spectral <- analyze_bic(X_spectral, B_spectral, X, B)
+      
+      result["Spectral", "consensus", r] <- result_spectral$consensus
+      result["Spectral", "recovery", r] <- result_spectral$recovery
+      result["Spectral", "relevance", r] <- result_spectral$relevance
+      result["Spectral", "K", r] <- K_spectral
+    } else {
+      result["Spectral", "K", r] <- K_spectral
+    }
+  }
+  
+  #-------------------------------
+  # Plaid
+  #-------------------------------
+  
+  if (RUN_PLAID) {
+    
+    plaid_out = capture.output(out <- biclust(Y, method = BCPlaid(), max.layers = K))
+    
+    X_plaid = as.matrix(apply(out@RowxNumber, 2, as.numeric))
+    B_plaid = as.matrix(apply(out@NumberxCol, 1, as.numeric))
+    
+    K_plaid = ncol(X_plaid)
+    
+    if (is.null(K_plaid)) {
+      K_plaid = 0
+    }
+    
+    if(K_plaid > 0) {
+      result_plaid <- analyze_bic(X_plaid, X_plaid, X, B)
+      
+      result["Plaid", "consensus", r] <- result_plaid$consensus
+      result["Plaid", "recovery", r] <- result_plaid$recovery
+      result["Plaid", "relevance", r] <- result_plaid$relevance
+      result["Plaid", "K", r] <- K_plaid
+    } else {
+      result["Plaid", "K", r] <- K_plaid
+    }
+  }
+  
 
   print(r)
 }
-
 
 
 save(result, file = "results/sim_study_2.RData")

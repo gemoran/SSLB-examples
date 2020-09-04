@@ -8,18 +8,20 @@ mRNA <- read.table("https://storage.googleapis.com/linnarsson-lab-www-blobs/blob
 
 mRNA <- t(mRNA)
 
+system2("mkdir", "data")
+
 # Extract meta data and save as separate .txt file
 meta_data <- mRNA[-c(1,2), c(1:10)]
 colnames(meta_data) <- mRNA[2,1:10]
 colnames(meta_data)[2] <- "group"
-write.table(meta_data, file = "meta_data_mRNA.txt")
+write.table(meta_data, file = "data/meta_data_mRNA.txt")
 
 # Extract expression data and save as Y_all.txt
 Y_all <- mRNA[-c(1,2),-c(1:11)]
 colnames(Y_all) = mRNA[1,-c(1:11)]
 rownames(Y_all) = mRNA[-c(1,2), 8]
 class(Y_all) = "numeric"
-write.table(Y_all, file = "Y_all.txt")
+write.table(Y_all, file = "data/Y_all.txt")
 
 #### now we remove genes as per page 5 of supplementary material of Zeisel et al
 
@@ -59,6 +61,16 @@ Y <- apply(Y, 2, as.numeric)
 
 ## save unnormalized gene expression
 write.table(t(Y), "data/Y_raw.txt")
+
+Y = Y_raw
+
+# normalize quantiles (average quantile normalization)
+Y <- normalize.quantiles(Y_raw)
+Y <- t(Y)
+
+write.table(Y, file = "data/Y_quantile.txt", row.names = F, col.names = F)
+
+write.table(t(Y), file = "data/Y_bicmix.txt", row.names = F, col.names = F)
 
 # gene and cell info
 genes <- Y_out[-c(1,2), 1]
